@@ -7,6 +7,8 @@ import com.project.code.Service.OrderService;
 import java.util.HashMap;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -32,20 +34,24 @@ public class StoreController {
         return response;
     }
 
+    /** Returns 200 with true when the store exists, 404 with false when it does not. */
     @GetMapping("validate/{storeId}")
-    public boolean validateStore(@PathVariable Long storeId) {
-        return storeRepository.findByid(storeId) != null;
+    public ResponseEntity<Boolean> validateStore(@PathVariable Long storeId) {
+        boolean exists = storeRepository.findByid(storeId) != null;
+        return ResponseEntity.status(exists ? HttpStatus.OK : HttpStatus.NOT_FOUND).body(exists);
     }
 
+    /** Returns 200 on success; 400 with an "error" message when the order cannot be placed. */
     @PostMapping("/placeOrder")
-    public Map<String, String> placeOrder(@RequestBody PlaceOrderRequestDTO placeOrderRequest) {
+    public ResponseEntity<Map<String, String>> placeOrder(@RequestBody PlaceOrderRequestDTO placeOrderRequest) {
         Map<String, String> response = new HashMap<>();
         try {
             orderService.saveOrder(placeOrderRequest);
             response.put("message", "Order placed successfully");
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
-            response.put("Error", e.getMessage());
+            response.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
         }
-        return response;
     }
 }
