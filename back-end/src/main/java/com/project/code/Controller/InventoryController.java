@@ -11,6 +11,8 @@ import java.util.List;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -89,20 +91,33 @@ public class InventoryController {
         return response;
     }
 
+    /**
+     * Filters one store's inventory by category and/or name; the literal "null" means "no filter".
+     * Both "null" returns the whole store. A missing or invalid store id gives 400 with an empty list.
+     */
     @GetMapping("filter/{category}/{name}/{storeid}")
-    public Map<String, Object> getProductName(@PathVariable String category, @PathVariable String name,
-            @PathVariable Long storeid) {
+    public ResponseEntity<Map<String, Object>> getProductName(@PathVariable String category,
+            @PathVariable String name, @PathVariable Long storeid) {
+        Map<String, Object> response = new HashMap<>();
+        if (storeid == null || storeid <= 0) {
+            response.put("message", "A valid store id is required");
+            response.put("product", List.of());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        }
+        boolean noCategory = category == null || "null".equals(category);
+        boolean noName = name == null || "null".equals(name);
         List<Product> products;
-        if ("null".equals(category)) {
+        if (noCategory && noName) {
+            products = productRepository.findProductsByStoreId(storeid);
+        } else if (noCategory) {
             products = productRepository.findByNameLike(storeid, name);
-        } else if ("null".equals(name)) {
+        } else if (noName) {
             products = productRepository.findByCategoryAndStoreId(storeid, category);
         } else {
             products = productRepository.findByNameAndCategory(storeid, name, category);
         }
-        Map<String, Object> response = new HashMap<>();
         response.put("product", withStoreStock(products, storeid));
-        return response;
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("search/{name}/{storeId}")
@@ -124,11 +139,25 @@ public class InventoryController {
         return response;
     }
 
+    /**
+     * Checks that the store holds at least the requested quantity of the product.
+     * 200 true: enough stock; 409 false: not enough; 404 false: product not stocked in this store;
+     * 400 false: quantity is not positive.
+     */
     @GetMapping("validate/{quantity}/{storeId}/{productId}")
-    public boolean validateQuantity(@PathVariable Integer quantity, @PathVariable Long storeId,
+    public ResponseEntity<Boolean> validateQuantity(@PathVariable Integer quantity, @PathVariable Long storeId,
             @PathVariable Long productId) {
+        if (quantity == null || quantity <= 0) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(false);
+        }
         Inventory inventory = inventoryRepository.findByProductIdandStoreId(productId, storeId);
-        return inventory != null && inventory.getStockLevel() >= quantity;
+        if (inventory == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(false);
+        }
+        if (inventory.getStockLevel() < quantity) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(false);
+        }
+        return ResponseEntity.ok(true);
     }
 
     /**
