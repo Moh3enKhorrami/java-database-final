@@ -1,7 +1,6 @@
 package com.project.code.Controller;
 
 import com.project.code.Model.Product;
-import com.project.code.Repo.InventoryRepository;
 import com.project.code.Repo.ProductRepository;
 import com.project.code.Service.ServiceClass;
 import java.util.HashMap;
@@ -9,6 +8,8 @@ import java.util.List;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -28,9 +29,6 @@ public class ProductController {
     @Autowired
     private ServiceClass serviceClass;
 
-    @Autowired
-    private InventoryRepository inventoryRepository;
-
     @PostMapping
     public Map<String, String> addProduct(@RequestBody Product product) {
         Map<String, String> response = new HashMap<>();
@@ -47,11 +45,17 @@ public class ProductController {
         return response;
     }
 
+    /** Returns 200 with the product, or 404 with a message when no product has this id. */
     @GetMapping("/product/{id}")
-    public Map<String, Object> getProductbyId(@PathVariable Long id) {
+    public ResponseEntity<Map<String, Object>> getProductbyId(@PathVariable Long id) {
         Map<String, Object> response = new HashMap<>();
-        response.put("products", productRepository.findByid(id));
-        return response;
+        Product product = productRepository.findByid(id);
+        if (product == null) {
+            response.put("message", "Product not found with id: " + id);
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+        }
+        response.put("products", product);
+        return ResponseEntity.ok(response);
     }
 
     @PutMapping
@@ -99,22 +103,25 @@ public class ProductController {
         return response;
     }
 
+    /** Deletes the product and its inventory in one transaction (see ServiceClass). */
     @DeleteMapping("/{id}")
-    public Map<String, String> deleteProduct(@PathVariable Long id) {
+    public ResponseEntity<Map<String, String>> deleteProduct(@PathVariable Long id) {
         Map<String, String> response = new HashMap<>();
         if (!serviceClass.ValidateProductId(id)) {
             response.put("message", "Product not present in database");
-            return response;
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
         }
         try {
-            // Inventory points at the product by foreign key, so delete it first
-            inventoryRepository.deleteByProductId(id);
-            productRepository.deleteById(id);
+            serviceClass.deleteProductWithInventory(id);
             response.put("message", "Product deleted successfully");
+            return ResponseEntity.ok(response);
         } catch (DataIntegrityViolationException e) {
             response.put("message", "Product cannot be deleted because it is used in orders");
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+        } catch (Exception e) {
+            response.put("message", "Error deleting product: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
-        return response;
     }
 
     @GetMapping("/searchProduct/{name}")

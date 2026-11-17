@@ -5,6 +5,7 @@ import com.project.code.Model.Product;
 import com.project.code.Repo.InventoryRepository;
 import com.project.code.Repo.ProductRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ServiceClass {
@@ -37,5 +38,16 @@ public class ServiceClass {
     public Inventory getInventoryId(Inventory inventory) {
         return inventoryRepository.findByProductIdandStoreId(
                 inventory.getProduct().getId(), inventory.getStore().getId());
+    }
+
+    /**
+     * Deletes the product together with its inventory rows in one transaction:
+     * if either delete fails, both are rolled back.
+     */
+    @Transactional
+    public void deleteProductWithInventory(Long productId) {
+        inventoryRepository.deleteByProductId(productId);
+        productRepository.deleteById(productId);
+        productRepository.flush();
     }
 }
