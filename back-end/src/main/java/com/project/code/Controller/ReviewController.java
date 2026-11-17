@@ -24,6 +24,10 @@ public class ReviewController {
     @Autowired
     private CustomerRepository customerRepository;
 
+    /**
+     * Returns every review of one product in one store as {"reviews": [{comment, rating, customerName}]}.
+     * The customer name is looked up from MySQL for each review (reviews live in MongoDB).
+     */
     @GetMapping("/{storeId}/{productId}")
     public Map<String, Object> getReviews(@PathVariable Long storeId, @PathVariable Long productId) {
         List<Review> reviews = reviewRepository.findByStoreIdAndProductId(storeId, productId);
@@ -40,6 +44,15 @@ public class ReviewController {
 
         Map<String, Object> response = new HashMap<>();
         response.put("reviews", result);
+        return response;
+    }
+
+    /** Returns all reviews in the database wrapped as {"reviews": [...]}. */
+    @GetMapping
+    public Map<String, Object> getAllReviews() {
+        List<Review> reviews = reviewRepository.findAll();
+        Map<String, Object> response = new HashMap<>();
+        response.put("reviews", reviews);
         return response;
     }
 }
